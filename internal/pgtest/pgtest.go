@@ -24,6 +24,7 @@ func Start(ctx context.Context) (*pgxpool.Pool, func(), error) {
 		}
 		base := filepath.Join(os.TempDir(), "pgjq-embedded")
 		pg := embedded.NewDatabase(embedded.DefaultConfig().
+			Version(embedded.V16). // версия закреплена: «последняя» бывает ещё недоступна для некоторых платформ
 			Port(uint32(port)).
 			RuntimePath(filepath.Join(base, fmt.Sprint(port))).
 			CachePath(filepath.Join(base, "cache")).
