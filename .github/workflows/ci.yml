@@ -1,0 +1,56 @@
+name: CI
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  # Тесты идут на настоящем PostgreSQL трёх версий, с детектором гонок
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        postgres: ["14", "16", "17"]
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:${{ matrix.postgres }}
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 5s --health-timeout 5s --health-retries 20
+    env:
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/postgres?sslmode=disable
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version-file: go.mod
+      - run: go vet ./...
+      - run: go test -race -count=1 -cover ./...
+      - name: Сквозной прогон командной строки
+        run: bash scripts/smoke.sh
+      - name: Бенчмарк на этом Postgres
+        run: |
+          go build -o pgjq ./cmd/pgjq
+          ./pgjq bench --jobs 20000 --workers 4 --concurrency 16 | tee bench-${{ matrix.postgres }}.txt
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: bench-pg${{ matrix.postgres }}
+          path: bench-${{ matrix.postgres }}.txt
+
+  # Тесты без Postgres в окружении тоже должны работать: поднимется встроенный (так проект пробуют без Docker)
+  embedded:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version-file: go.mod
+      - run: go test -count=1 ./jobq/

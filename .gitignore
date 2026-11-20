@@ -1,0 +1,5 @@
+dist/
+/pgjq
+/pgjq.exe
+*.log
+.env
